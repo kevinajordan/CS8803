@@ -1,0 +1,118 @@
+#include <unistd.h>
+#include "gfserver.h"
+
+/* 
+ * Modify this file to implement the interface specified in
+ * gfserver.h.
+ */
+
+struct gfserver_t {
+    unsigned short port;
+    int max_npending;
+    int socket_fd;
+    int context_fd;
+    int status;
+    ssize_t (*server_handler)(gfcontext_t *, char *, void*);
+    void* handler_arg;
+};
+
+struct gfcontext_t{
+    gfservert_t* gfs;
+    int context_fd;
+    int status;
+};
+
+static void initializeSocket(gfserver_t * _gfs);
+
+
+
+ssize_t gfs_sendheader(gfcontext_t *ctx, gfstatus_t status, size_t file_len){
+
+}
+
+ssize_t gfs_send(gfcontext_t *ctx, void *data, size_t len){
+
+}
+
+void gfs_abort(gfcontext_t *ctx){
+    free(ctx->context_fd);
+}
+
+gfserver_t* gfserver_create(){
+    gfserver_t* gfs = (*gfserver_t) malloc(sizeof(gfcrequest_t));
+    gfs->port = 80;
+    gfs->max_npending = -1;
+    gfs->status = GF_ERROR;
+}
+
+void gfserver_set_port(gfserver_t *_gfs, unsigned short _port){
+    _gfs->port = htons(_port);
+}
+
+void gfserver_set_maxpending(gfserver_t * _gfs, int _max_npending){
+    _gfs->max_npending = _max_npending;
+}
+
+void gfserver_set_handler(gfserver_t* _gfs, ssize_t (*_handler)(gfcontext_t *, char *, void*)){
+    _gfs->server_handler = _handler;
+}
+
+void gfserver_set_handlerarg(gfserver_t* _gfs, void* _arg){
+    _gfs->handler_arg = _arg;
+}
+
+void gfserver_serve(gfserver_t *gfs){
+    initializeSocket(&gfs->socket_fd, gfs->port, gfs->max_npending);
+    
+    while(1){
+        gfcontext_t ctx = (gfcontext_t*) malloc(sizeof(gfcontext_t));
+        ctx->connection_fd = handle_connections(gfs->socket_fd);
+        ctx->gfs = gfs;
+        gfs->server_handler(ctx);
+    }
+    
+}
+
+static void initializeSocket(gfserver_t * _gfs){
+    int connection_fd;
+    
+    gfs->socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (gfs->socket_fd < 0)
+        _gfs->status = GF_ERROR;
+    
+    struct sockaddr_in server_addr;
+    bzero((char *) &server_addr, sizeof(server_addr));
+    
+    
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(_port);
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    int enable = 1;
+    setsockopt(&_gfs->socket_fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int));
+    
+    int success = bind(&gfs->socket_fd, (struct sockaddr*) &server_addr, sizeof(server_addr));
+    if(success < 0) _gfs->status = GF_ERROR;
+    
+    
+    listen(&_gfs->socket_fd, gfs->max_npending);
+    return;
+}
+
+void handle_connections(int _socket_fd){
+    char msg[BUFSIZE];
+    int connFd;
+    struct sockaddr_in client_addr;
+    socklen_t client_size = sizeof(client_addr);
+    
+    
+    connFd = accept(_socket_fd, (struct sockaddr*) &client_addr, &client_size);
+        /*bzero(msg, BUFSIZE);
+        
+        int n = read(connFd, msg, BUFSIZE - 1);
+        if(n < 0)
+            error("ERROR: read()");
+        
+        write(connFd, msg, strlen(msg));
+        close(connFd);*/
+    
+}

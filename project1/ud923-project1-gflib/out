@@ -1,0 +1,1 @@
+cc -Wall --std=gnu99 -g -Wno-format-security   -c -o gfserver.o gfserver.c
