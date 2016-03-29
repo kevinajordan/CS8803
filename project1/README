@@ -1,0 +1,51 @@
+Gfclient/GFserver
+    My main strategy to implement the client and server was to use a 'state machine' in each
+    in order to handle the protocol parsing and error handling
+    In other words, the client/server have a variable to distinguish in what particular 'state'
+    the transmission is in, and what has been parsed and what not.
+    THe client/server move to the next states after the previous ones has been completed.  The states include
+    'parse_method', 'parse_scheme', 'parse_path', etc.
+ 
+     For each individual state, I make sure I have received enough bytes in order to even consider 
+     processing that state.   For instance, if the state = parse_scheme, I make sure that at least
+     strlen("GETFILE") bytes have been received before I try to process that state.  If this amount
+     of bytes have not been received, I try again later.  A timeout will fire if more bytes are not 
+     received eventually.
+     
+     As soon as an error is encountered I return with the appropriate error code.
+
+Multithreaded client/server
+    I implemented both the client and server following the boss/thread worker paradigm.  The 'boss' 
+    creates the worker threads and continuously enqueues requests to a queue.  The worker threads
+    atomically (and thread-safe) dequeue requests from the queue and process them in parallel.
+    
+    In the case of the client, I also use 'join' to guarantee all requests have been handled before
+    cleaning up resources and finishing execution
+
+    The request queue is protected using mutexes and condition variables in order to avoid race
+    conditions.
+
+    In the multithreaded server, I declared the queue, mutex, and conditional variables as global 
+    variables for simplicity.  In the client, I made server and port global to avoid having to pass 
+    this info individually to every worker thread.
+
+
+* Any insights. We may consider extra points!
+  I would suggest considering making Part 1's protocol more uniform.  Most of my time in Part 1 was spent
+  reading countless of Piazza post for clarification.   I think students could learn the same amount of 
+  material on sockets (OS networking) even if the protocol is more uniform (eg. tokens always follwed by 
+  spaces)
+
+  I also hope we eventually learn about 'libevent'.  This seems the most popular networking library
+  out there, and I wanted to learn how it works in the project.
+
+
+* Known bugs
+
+  None
+
+
+* Credits if you used others’ (publicly available) code.
+    I read Stack Overflow posts and some tutorials on sockets but I didn't copy any code.
+
+
