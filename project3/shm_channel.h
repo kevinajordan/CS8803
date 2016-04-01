@@ -22,6 +22,7 @@ plus EXIT_SUCCESS and EXIT_FAILURE constants */
 #define HEADER_PRIORITY 2
 #define ERROR (-1)
 #define MAX_SEG 10
+#define MAX_CACHE_REQUEST_LEN 256
 
 
 typedef struct ctrl_msg{
@@ -31,27 +32,34 @@ typedef struct ctrl_msg{
 
 
 typedef struct segment_item{
-    char* mem;
+    int   segment_index;
     char* segment_id;
+    void* segment_ptr;
 }segment_item;
 
+
+enum sm{ SM_GET_FILESIZE, SM_GET_DATA};
+
+typedef struct thread_packet{
+    char requested_file [MAX_CACHE_REQUEST_LEN];
+    int file_size;
+    int chunk_size;
+    int segment_size;
+    int cache_hit;
+}thread_packet;
 
 
 
 mqd_t create_message_queue(char* _name, int _flags, int _msg_sz, int _max_msgs);
-void send_message(mqd_t _mqd, char* _msg, int _msg_len, int priority);
-void send_file(mqd_t _mqd, int _fd);
+void send_message(mqd_t _mqd, void* _msg, int _msg_len, int priority);
 void receive_message(mqd_t _mqd, char* _buffer);
 struct mq_attr get_queue_attr(mqd_t _mqd);
 
 
-void shm_init_segments(steque_t* _segment_queue, int _num_segments, int _segment_size);
-void shm_init_segments2(steque_t* _segment_queue, int _num_segments, int _segment_size);
-void shm_init_ids(steque_t* _segment_ids, int _num_segments);
-void shm_map_segments(steque_t* _segment_mems, steque_t* _segment_ids, int _segment_size);
-void shm_map_segments2(steque_t* _segment_mems, steque_t* _segment_ids, int _segment_size);
-void shm_create_segment_info(steque_t* _segment_queue, steque_t* segment_ids, steque_t* _segment_mems);
-void shm_create_segment_info2(steque_t* _segment_queue, steque_t* segment_ids, steque_t* _segment_mems);
+void  shm_create_segments(steque_t* segment_q, int _num_segments, int _segment_size);
+char* shm_init_id(int _index);
+void* shm_map_segment(char* _segment_id, int _segment_size);
+
 
 
 /* Below helper macro was copied from

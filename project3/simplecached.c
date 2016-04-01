@@ -38,15 +38,18 @@ void Usage() {
   fprintf(stdout, "%s", USAGE);
 }
 
+void send_file(mqd_t _tx_mqd, mqd_t _rx_mqd, int _fd, thread_packet thr_pkt, segment_item* seg);
+
+
 int main(int argc, char **argv) {
 	int nthreads = 1;
     char len[MAX_CACHE_REQUEST_LEN];
 	char *cachedir = "locals.txt";
     char* rxq = "/proxy-to-cache";
     char* txq = "/cache-to-proxy";
-    char* cxq = "/control-cache-proxy";
+    char* cxq_tx = "/control-cache-proxy";
+    char* cxq_rx = "/control-proxy-cache";
     char option_char;
-    char buffer[MSG_SIZE];
     ctrl_msg ctrl;
 
 
@@ -84,64 +87,98 @@ int main(int argc, char **argv) {
     
 
 
-    mqd_t tx_mqd = create_message_queue(txq, O_CREAT | O_RDWR,  MSG_SIZE, MAX_MSGS);
-    mqd_t rx_mqd = create_message_queue(rxq, O_CREAT | O_RDWR,  MSG_SIZE, MAX_MSGS);
-    mqd_t cx_mqd = create_message_queue(cxq, O_CREAT | O_RDWR,  sizeof(ctrl_msg), MAX_MSGS);
+    mqd_t tx_mqd = create_message_queue(txq, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
+    mqd_t rx_mqd = create_message_queue(rxq, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
+    mqd_t cx_mqd_tx = create_message_queue(cxq_tx, O_CREAT | O_RDWR,  sizeof(ctrl_msg), MAX_MSGS);
+    mqd_t cx_mqd_rx = create_message_queue(cxq_rx, O_CREAT | O_RDWR,  sizeof(ctrl_msg), MAX_MSGS);
 
-
     
-    int brx = mq_receive(cx_mqd, (char*)&ctrl, sizeof(ctrl), 0);
-    if(brx < 0){
-        perror("mq_receive(ctrl_msg)");
-        exit(EXIT_FAILURE);
-    }
+    int status= mq_receive(cx_mqd_rx, (char*)&ctrl, sizeof(ctrl_msg), 0);
+    ASSERT(status >= 0);
+    status = mq_send(cx_mqd_tx, (void*)&ctrl, sizeof(ctrl_msg), 0);
+    ASSERT(status >= 0);
     
     
-    fprintf(stderr, "Ctrl, seg_size=%d, num_seg=%d\n", ctrl.segment_size, ctrl.num_segments);
+    //fprintf(stderr, "Ctrl, seg_size=%d, num_seg=%d\n", ctrl.segment_size, ctrl.num_segments);
     steque_t* segment_q = (steque_t*) malloc(sizeof(steque_t));
-    shm_init_segments2(segment_q, ctrl.segment_size, ctrl.num_segments);
+    shm_create_segments(segment_q, ctrl.num_segments, ctrl.segment_size);
     
     segment_item* seg = (segment_item*) steque_front(segment_q);
     
     
-    sprintf(seg->mem, "%s", "Hi to proxy (cache)");
-
+    
+             
     //fprintf(stderr, "Segment id = %s\n", seg->segment_id);
-    fprintf(stderr, "Writing: %s\n", seg->mem);
-
+    thread_packet thr_pkt;
     
-
-    
-
-    
-
-
-
     while(1){
-        receive_message(rx_mqd, &buffer[0]);
-        int fd = simplecache_get(&buffer[0]);
+        fprintf(stderr, "Waiting for request...\n");
+
+        int bytes_received = mq_receive(rx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), 0);
+        
+        thr_pkt.segment_size = ctrl.segment_size;
+        thr_pkt.chunk_size = ctrl.segment_size;
+        
+        ASSERT(bytes_received > 0);
+        fprintf(stderr, "Requests recieved.. Path: %s\n", thr_pkt.requested_file);
+        int fd = simplecache_get(thr_pkt.requested_file);
+        
         if(fd == -1){
+            thr_pkt.cache_hit = 0;
             fprintf(stderr, "File not found in cache\n");
-            send_message(tx_mqd, "Miss", 4, NOT_FOUND_PRIORITY);
+            send_message(tx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), 0);
         }
         else{
             unsigned file_size = lseek(fd, 0, SEEK_END); ASSERT(file_size > 0);
             lseek(fd, 0, SEEK_SET);
             memset(len, 0, sizeof(len));
             sprintf(len, "%d", file_size);
-            send_message(tx_mqd, len, strlen(len)+1, HEADER_PRIORITY);
-            send_file(tx_mqd, fd);
+            thr_pkt.cache_hit = 1;
+            thr_pkt.file_size = atoi(len);
+        
+            fprintf(stderr, "Sending request ACK..\n");
+            send_message(tx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), 0);
+            
+            send_file(tx_mqd, rx_mqd, fd, thr_pkt, seg);
+                
         }
         
-        printf(stderr, "Reading Segment: %s \n", seg->mem);
+        //fprintf(stderr, "Reading Segment: %s \n", (char*)seg->segment_ptr);
     }
+     
+    
     mq_unlink(rxq);
     mq_unlink(txq);
-    
-    
-    
-    
 }
+
+void send_file(mqd_t _tx_mqd, mqd_t _rx_mqd, int _fd, thread_packet thr_pkt, segment_item* _seg){
+    int total_bytes_rx = 0;
+    int n;
+    
+    while (total_bytes_rx < thr_pkt.file_size){
+        int offset = thr_pkt.file_size - total_bytes_rx;
+        thr_pkt.chunk_size = (offset < thr_pkt.segment_size) ? offset : thr_pkt.segment_size;
+        
+
+        n = read(_fd, _seg->segment_ptr, thr_pkt.chunk_size);
+        ASSERT(n == thr_pkt.chunk_size);
+        
+
+        //sprintf(_seg->segment_ptr, "%s", _seg->segment_ptr);
+        //fprintf(stderr,"n: %d, chunk: %d \n", n, thr_pkt.chunk_size);
+        
+        fprintf(stderr,"Client can read data now. Chunk: %d, Hit = %d\n", thr_pkt.chunk_size, thr_pkt.cache_hit);
+        send_message(_tx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), 0);
+
+        total_bytes_rx += thr_pkt.chunk_size;
+        
+        fprintf(stderr,"Waiting for ACK\n");
+        n = mq_receive(_rx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), 0);
+        ASSERT(n >= 0);
+        
+    }
+}
+
 
 
 

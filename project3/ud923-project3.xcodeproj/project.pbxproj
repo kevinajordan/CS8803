@@ -1,0 +1,174 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXFileReference section */
+		3BF305441CA3737A0055DCF7 /* .DS_Store */ = {isa = PBXFileReference; lastKnownFileType = file; path = .DS_Store; sourceTree = "<group>"; };
+		3BF305451CA3737A0055DCF7 /* cached_files */ = {isa = PBXFileReference; lastKnownFileType = folder; path = cached_files; sourceTree = "<group>"; };
+		3BF305461CA3737A0055DCF7 /* gfclient_download */ = {isa = PBXFileReference; lastKnownFileType = file; path = gfclient_download; sourceTree = "<group>"; };
+		3BF305471CA3737A0055DCF7 /* gfclient_measure */ = {isa = PBXFileReference; lastKnownFileType = file; path = gfclient_measure; sourceTree = "<group>"; };
+		3BF305481CA3737A0055DCF7 /* gfserver.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = gfserver.h; sourceTree = "<group>"; };
+		3BF305491CA3737A0055DCF7 /* gfserver.o */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.objfile"; path = gfserver.o; sourceTree = "<group>"; };
+		3BF3054A1CA3737A0055DCF7 /* handle_with_cache.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = handle_with_cache.c; sourceTree = "<group>"; };
+		3BF3054B1CA3737A0055DCF7 /* handle_with_curl.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = handle_with_curl.c; sourceTree = "<group>"; };
+		3BF3054C1CA3737A0055DCF7 /* handle_with_file.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = handle_with_file.c; sourceTree = "<group>"; };
+		3BF3054D1CA3737A0055DCF7 /* locals.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = locals.txt; sourceTree = "<group>"; };
+		3BF3054E1CA3737A0055DCF7 /* Makefile */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = Makefile; sourceTree = "<group>"; };
+		3BF3054F1CA3737A0055DCF7 /* shm_channel.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = shm_channel.c; sourceTree = "<group>"; };
+		3BF305501CA3737A0055DCF7 /* shm_channel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = shm_channel.h; sourceTree = "<group>"; };
+		3BF305511CA3737A0055DCF7 /* simplecache.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = simplecache.c; sourceTree = "<group>"; };
+		3BF305521CA3737A0055DCF7 /* simplecache.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = simplecache.h; sourceTree = "<group>"; };
+		3BF305531CA3737A0055DCF7 /* simplecached.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = simplecached.c; sourceTree = "<group>"; };
+		3BF305541CA3737A0055DCF7 /* steque.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = steque.c; sourceTree = "<group>"; };
+		3BF305551CA3737A0055DCF7 /* steque.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = steque.h; sourceTree = "<group>"; };
+		3BF305561CA3737A0055DCF7 /* webproxy.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = webproxy.c; sourceTree = "<group>"; };
+		3BF305571CA3737A0055DCF7 /* workload.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = workload.txt; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		3BF3053E1CA3737A0055DCF7 = {
+			isa = PBXGroup;
+			children = (
+				3BF305441CA3737A0055DCF7 /* .DS_Store */,
+				3BF305451CA3737A0055DCF7 /* cached_files */,
+				3BF305461CA3737A0055DCF7 /* gfclient_download */,
+				3BF305471CA3737A0055DCF7 /* gfclient_measure */,
+				3BF305481CA3737A0055DCF7 /* gfserver.h */,
+				3BF305491CA3737A0055DCF7 /* gfserver.o */,
+				3BF3054A1CA3737A0055DCF7 /* handle_with_cache.c */,
+				3BF3054B1CA3737A0055DCF7 /* handle_with_curl.c */,
+				3BF3054C1CA3737A0055DCF7 /* handle_with_file.c */,
+				3BF3054D1CA3737A0055DCF7 /* locals.txt */,
+				3BF3054E1CA3737A0055DCF7 /* Makefile */,
+				3BF3054F1CA3737A0055DCF7 /* shm_channel.c */,
+				3BF305501CA3737A0055DCF7 /* shm_channel.h */,
+				3BF305511CA3737A0055DCF7 /* simplecache.c */,
+				3BF305521CA3737A0055DCF7 /* simplecache.h */,
+				3BF305531CA3737A0055DCF7 /* simplecached.c */,
+				3BF305541CA3737A0055DCF7 /* steque.c */,
+				3BF305551CA3737A0055DCF7 /* steque.h */,
+				3BF305561CA3737A0055DCF7 /* webproxy.c */,
+				3BF305571CA3737A0055DCF7 /* workload.txt */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXLegacyTarget section */
+		3BF305431CA3737A0055DCF7 /* ud923-project3 */ = {
+			isa = PBXLegacyTarget;
+			buildArgumentsString = "$(ACTION)";
+			buildConfigurationList = 3BF305581CA3737A0055DCF7 /* Build configuration list for PBXLegacyTarget "ud923-project3" */;
+			buildPhases = (
+			);
+			buildToolPath = /usr/bin/make;
+			buildWorkingDirectory = "/Users/ares/Documents/OS/projects/ud923-project3";
+			dependencies = (
+			);
+			name = "ud923-project3";
+			passBuildSettingsInEnvironment = 1;
+			productName = "ud923-project3";
+		};
+/* End PBXLegacyTarget section */
+
+/* Begin PBXProject section */
+		3BF3053F1CA3737A0055DCF7 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+			};
+			buildConfigurationList = 3BF305421CA3737A0055DCF7 /* Build configuration list for PBXProject "ud923-project3" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = 3BF3053E1CA3737A0055DCF7;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				3BF305431CA3737A0055DCF7 /* ud923-project3 */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin XCBuildConfiguration section */
+		3BF305401CA3737A0055DCF7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
+				COPY_PHASE_STRIP = NO;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx10.6;
+			};
+			name = Debug;
+		};
+		3BF305411CA3737A0055DCF7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_32_BIT)";
+				COPY_PHASE_STRIP = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				SDKROOT = macosx10.6;
+			};
+			name = Release;
+		};
+		3BF305591CA3737A0055DCF7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+				DEBUGGING_SYMBOLS = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_ENABLE_FIX_AND_CONTINUE = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = "";
+				PRODUCT_NAME = "ud923-project3";
+			};
+			name = Debug;
+		};
+		3BF3055A1CA3737A0055DCF7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_ENABLE_FIX_AND_CONTINUE = NO;
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = "";
+				PRODUCT_NAME = "ud923-project3";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		3BF305421CA3737A0055DCF7 /* Build configuration list for PBXProject "ud923-project3" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3BF305401CA3737A0055DCF7 /* Debug */,
+				3BF305411CA3737A0055DCF7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3BF305581CA3737A0055DCF7 /* Build configuration list for PBXLegacyTarget "ud923-project3" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3BF305591CA3737A0055DCF7 /* Debug */,
+				3BF3055A1CA3737A0055DCF7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 3BF3053F1CA3737A0055DCF7 /* Project object */;
+}

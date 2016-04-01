@@ -40,7 +40,8 @@ static gfserver_t gfs;
 
 mqd_t tx_mqd;
 mqd_t rx_mqd;
-mqd_t ctrl_mqd;
+mqd_t ctrl_tx_mqd;
+mqd_t ctrl_rx_mqd;
 
 static void _sig_handler(int signo){
   if (signo == SIGINT || signo == SIGTERM){
@@ -95,32 +96,39 @@ int main(int argc, char **argv) {
         }
     }
     
-    ctrl_msg ctrl = {num_segments, segment_size};
+    ctrl_msg ctrl;
+    ctrl.num_segments = num_segments;
+    ctrl.segment_size = segment_size;
   
     /* SHM initialization...*/
     char* txq = "/proxy-to-cache";
     char* rxq = "/cache-to-proxy";
-    char* cxq = "/control-cache-proxy";
+    char* cxq_tx = "/control-proxy-cache";
+    char* cxq_rx = "/control-cache-proxy";
 
 
     // for(int i = 0; i < nworkerthreads)
-    tx_mqd = create_message_queue(txq, O_CREAT | O_RDWR,  MSG_SIZE, MAX_MSGS);
-    rx_mqd = create_message_queue(rxq, O_CREAT | O_RDWR,  MSG_SIZE, MAX_MSGS);
-    ctrl_mqd = create_message_queue(cxq, O_CREAT | O_RDWR,  MSG_SIZE, MAX_MSGS);
+    tx_mqd = create_message_queue(txq, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
+    rx_mqd = create_message_queue(rxq, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
+    ctrl_tx_mqd = create_message_queue(cxq_tx, O_CREAT | O_RDWR,  sizeof(ctrl_msg), MAX_MSGS);
+    ctrl_rx_mqd = create_message_queue(cxq_rx, O_CREAT | O_RDWR,  sizeof(ctrl_msg), MAX_MSGS);
 
     
     
-    int status = mq_send(ctrl_mqd, (void*)&ctrl, sizeof(ctrl_msg), 0);
-    if(status < 0){
-        perror("mq_send(ctrl_mqd)");
-        exit(EXIT_FAILURE);
-    }
+    int status = mq_send(ctrl_tx_mqd, (void*)&ctrl, sizeof(ctrl_msg), 0);
+    ASSERT(status >= 0);
+    status = mq_receive(ctrl_rx_mqd, (char*)&ctrl, sizeof(ctrl_msg), 0);
+    ASSERT(status >= 0);
+    
+
+    
     
     steque_t* segment_q = (steque_t*) malloc(sizeof(steque_t));
-    shm_init_segments(segment_q, num_segments, segment_size);
-
-    segment_item* seg = (segment_item*) steque_front(segment_q);
-    fprintf(stderr, "Segment = %s\n", seg->segment_id);
+    shm_create_segments(segment_q, ctrl.num_segments, ctrl.segment_size);
+    
+    
+    //segment_item* seg = (segment_item*) steque_front(segment_q);
+    //fprintf(stderr, "Segment = %s\n", seg->segment_id);
 
 
     /*Initializing server*/
