@@ -43,6 +43,9 @@ mqd_t rx_mqd;
 mqd_t ctrl_tx_mqd;
 mqd_t ctrl_rx_mqd;
 
+pthread_mutex_t seg_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t  seg_cond  = PTHREAD_COND_INITIALIZER;
+
 static void _sig_handler(int signo){
   if (signo == SIGINT || signo == SIGTERM){
     gfserver_stop(&gfs);
@@ -114,13 +117,18 @@ int main(int argc, char **argv) {
     ctrl_rx_mqd = create_message_queue(cxq_rx, O_CREAT | O_RDWR,  sizeof(ctrl_msg), MAX_MSGS);
 
     
-    
-    int status = mq_send(ctrl_tx_mqd, (void*)&ctrl, sizeof(ctrl_msg), 0);
+    printf("sending ctrl\n");
+    int status = mq_send(ctrl_tx_mqd, (char*)&ctrl, sizeof(ctrl_msg), 0);
     ASSERT(status >= 0);
+    
+    printf("rx ctrl\n");
+
     status = mq_receive(ctrl_rx_mqd, (char*)&ctrl, sizeof(ctrl_msg), 0);
     ASSERT(status >= 0);
     
-
+    
+    mq_close(ctrl_tx_mqd);
+    mq_close(ctrl_rx_mqd);
     
     
     steque_t* segment_q = (steque_t*) malloc(sizeof(steque_t));

@@ -86,6 +86,7 @@ int main(int argc, char **argv) {
     
     
 
+    errno = 0;
 
     mqd_t tx_mqd = create_message_queue(txq, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
     mqd_t rx_mqd = create_message_queue(rxq, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
@@ -93,18 +94,28 @@ int main(int argc, char **argv) {
     mqd_t cx_mqd_rx = create_message_queue(cxq_rx, O_CREAT | O_RDWR,  sizeof(ctrl_msg), MAX_MSGS);
 
     
+    
+      printf("rx ctrl\n");
     int status= mq_receive(cx_mqd_rx, (char*)&ctrl, sizeof(ctrl_msg), 0);
-    ASSERT(status >= 0);
-    status = mq_send(cx_mqd_tx, (void*)&ctrl, sizeof(ctrl_msg), 0);
+    printf("status =%d\n", status);
     ASSERT(status >= 0);
     
+      printf("sending ctrl\n");
+    status = mq_send(cx_mqd_tx, (char*)&ctrl, sizeof(ctrl_msg), 0);
+    ASSERT(status >= 0);
+    
+    //mq_unlink(txq);
+    //mq_unlink(rxq);
+
+    mq_close(cx_mqd_tx);
+    mq_close(cx_mqd_rx);
     
     //fprintf(stderr, "Ctrl, seg_size=%d, num_seg=%d\n", ctrl.segment_size, ctrl.num_segments);
     steque_t* segment_q = (steque_t*) malloc(sizeof(steque_t));
     shm_create_segments(segment_q, ctrl.num_segments, ctrl.segment_size);
     
     segment_item* seg = (segment_item*) steque_front(segment_q);
-    
+    int ctrl_priority = 0;//ctrl.num_segments;
     
     
              
@@ -112,21 +123,22 @@ int main(int argc, char **argv) {
     thread_packet thr_pkt;
     
     while(1){
-        fprintf(stderr, "Waiting for request...\n");
+        fprintf(stderr, "Waiting for request... ctrl =%d\n", ctrl_priority);
 
-        int bytes_received = mq_receive(rx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), 0);
+        //Get request
+        int bytes_received = mq_receive(rx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), ctrl_priority);
         
         thr_pkt.segment_size = ctrl.segment_size;
         thr_pkt.chunk_size = ctrl.segment_size;
         
-        ASSERT(bytes_received > 0);
-        fprintf(stderr, "Requests recieved.. Path: %s\n", thr_pkt.requested_file);
+        ASSERT(bytes_received >= 0);
         int fd = simplecache_get(thr_pkt.requested_file);
-        
+        fprintf(stderr, "Requests recieved.. seg=%d, fd=%d, Path: %s\n", thr_pkt.segment_index, fd, thr_pkt.requested_file);
+
         if(fd == -1){
             thr_pkt.cache_hit = 0;
             fprintf(stderr, "File not found in cache\n");
-            send_message(tx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), 0);
+            send_message(tx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), thr_pkt.segment_index);
         }
         else{
             unsigned file_size = lseek(fd, 0, SEEK_END); ASSERT(file_size > 0);
@@ -137,10 +149,11 @@ int main(int argc, char **argv) {
             thr_pkt.file_size = atoi(len);
         
             fprintf(stderr, "Sending request ACK..\n");
-            send_message(tx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), 0);
+            send_message(tx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), thr_pkt.segment_index);
             
             send_file(tx_mqd, rx_mqd, fd, thr_pkt, seg);
-                
+            fprintf(stderr,"\n----- Transfer Complete! --- seg=%d\n", thr_pkt.segment_index);
+    
         }
         
         //fprintf(stderr, "Reading Segment: %s \n", (char*)seg->segment_ptr);
@@ -167,13 +180,16 @@ void send_file(mqd_t _tx_mqd, mqd_t _rx_mqd, int _fd, thread_packet thr_pkt, seg
         //sprintf(_seg->segment_ptr, "%s", _seg->segment_ptr);
         //fprintf(stderr,"n: %d, chunk: %d \n", n, thr_pkt.chunk_size);
         
-        fprintf(stderr,"Client can read data now. Chunk: %d, Hit = %d\n", thr_pkt.chunk_size, thr_pkt.cache_hit);
-        send_message(_tx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), 0);
+        //fprintf(stderr,"Client can read data now. Chunk: %d, Hit = %d\n", thr_pkt.chunk_size, thr_pkt.cache_hit);
+        
+        fprintf(stderr,"%d/%d .. ", total_bytes_rx, thr_pkt.file_size);
+
+        send_message(_tx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), thr_pkt.segment_index);
 
         total_bytes_rx += thr_pkt.chunk_size;
         
-        fprintf(stderr,"Waiting for ACK\n");
-        n = mq_receive(_rx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), 0);
+        //fprintf(stderr,"Waiting for data ACK\n");
+        n = mq_receive(_rx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), &(thr_pkt.segment_index));
         ASSERT(n >= 0);
         
     }

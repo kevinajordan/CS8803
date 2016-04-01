@@ -46,12 +46,13 @@ typedef struct thread_packet{
     int chunk_size;
     int segment_size;
     int cache_hit;
+    unsigned int segment_index;
 }thread_packet;
 
 
 
 mqd_t create_message_queue(char* _name, int _flags, int _msg_sz, int _max_msgs);
-void send_message(mqd_t _mqd, void* _msg, int _msg_len, int priority);
+void send_message(mqd_t _mqd, void* _msg, int _msg_len, unsigned int priority);
 void receive_message(mqd_t _mqd, char* _buffer);
 struct mq_attr get_queue_attr(mqd_t _mqd);
 

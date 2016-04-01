@@ -43,7 +43,7 @@ struct mq_attr get_queue_attr(mqd_t _mqd){
 }
 
 
-void send_message(mqd_t _mqd, void* _msg, int _msg_len, int priority){
+void send_message(mqd_t _mqd, void* _msg, int _msg_len, unsigned int priority){
     
     int status = mq_send(_mqd, _msg, _msg_len, priority);
     //ASSERT(status == 0);

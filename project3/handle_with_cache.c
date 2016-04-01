@@ -14,6 +14,9 @@
 
 extern mqd_t tx_mqd;
 extern mqd_t rx_mqd;
+extern pthread_mutex_t  seg_mutex;
+extern pthread_cond_t   seg_cond;
+extern steque_t         seg_queue;
 
    
 ssize_t handle_with_cache(gfcontext_t *ctx, char *path, void* arg)
@@ -24,27 +27,52 @@ ssize_t handle_with_cache(gfcontext_t *ctx, char *path, void* arg)
     thr_pkt.segment_size = 0;
     thr_pkt.chunk_size = 0;
     int gfs_bytes_sent;
-    
-
-    
     steque_t* segment_q = (steque_t*) arg;
-    
-    
+    int num_segments = steque_size(segment_q);
+    int ctrl_priority = 0;
     ASSERT(segment_q != NULL);
-    
     segment_item* seg = NULL;
     
+    int n;
+    int total_bytes_rx = 0;
+    enum sm state = SM_GET_FILESIZE;
+    
+    
+    pthread_mutex_lock(&seg_mutex);
+
+    fprintf(stderr,"Thread incoming thr_id=%x path: %s\n", (int)pthread_self(), thr_pkt.requested_file);
+
+    while(steque_isempty(segment_q))
+        pthread_cond_wait(&seg_cond, &seg_mutex);
+    
+    /*
+    while(1){
+        seg = (segment_item*)steque_front(segment_q);
+        steque_cycle(segment_q);
+        if(seg->segment_index == 9)
+            break;
+    }*/
+    
+    seg = steque_pop(segment_q);
+    
+    pthread_mutex_unlock(&seg_mutex);
+    
+    thr_pkt.segment_index = seg->segment_index;
+    
+    
+        fprintf(stderr,"Thread procesisng.. thr_id=%x path: %s\n", (int)pthread_self(), thr_pkt.requested_file);
+    /*
     while(1){
         seg = (segment_item*)steque_front(segment_q);
         steque_cycle(segment_q);
         if(seg->segment_index == 9)
             break;
     }
-    
+    */
     //sprintf(seg->mem, "%s", "Hi to cache (from proxy)");
 
     
-    ////fprintf(stderr,"Request sent...\n");
+    fprintf(stderr,"Ctrl = %d\n", ctrl_priority);
     
     /*
     while(steque_isempty(&request_queue))
@@ -59,11 +87,7 @@ ssize_t handle_with_cache(gfcontext_t *ctx, char *path, void* arg)
     //fprintf(stderr, "Segment id = %s\n", seg->segment_id);
     
 
-    
-    int n;
-    int total_bytes_rx = 0;
-    enum sm state = SM_GET_FILESIZE;
-    
+
     
     //fprintf(stderr,"Maximum # of messages on queue: %ld\n", attr.mq_maxmsg);
     //fprintf(stderr,"Maximum message size: %ld\n", attr.mq_msgsize);
@@ -71,15 +95,15 @@ ssize_t handle_with_cache(gfcontext_t *ctx, char *path, void* arg)
     
 
     fprintf(stderr,"----------------------\n");
-    fprintf(stderr,"Sending tx request.. path: %s\n", thr_pkt.requested_file);
-    send_message(tx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), 0);
+    fprintf(stderr,"Sending tx request.. seg idx=%d, thr_id=%x path: %s\n", thr_pkt.segment_index, (int)pthread_self(), thr_pkt.requested_file);
+    send_message(tx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), ctrl_priority);
 
     do{
         if(state == SM_GET_FILESIZE){
             //clock_gettime(CLOCK_REALTIME, &timeout);
             //timeout.tv_sec += 3;
             fprintf(stderr, "Wainting for response (cache hit/miss)...\n");
-            n = mq_receive(rx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), 0); //&timeout);
+            n = mq_receive(rx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), &thr_pkt.segment_index); //&timeout);
             
             //memset(seg->segment_ptr, 0, thr_pkt.segment_size);
             //       fprintf(stderr, "Reading Segment: %s \n", (char*)seg->segment_ptr);
@@ -94,18 +118,15 @@ ssize_t handle_with_cache(gfcontext_t *ctx, char *path, void* arg)
             state = SM_GET_DATA;
         }
         else if(state == SM_GET_DATA){
-            fprintf(stderr,"Waiting on data response..\n");
+            //fprintf(stderr,"Waiting on data response.. ");
 
-            n = mq_receive(rx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), 0); //&timeout);
+            n = mq_receive(rx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), &thr_pkt.segment_index); //&timeout);
             
-            fprintf(stderr,"Received response..\n");
+            fprintf(stderr,"Rx id: %x, c: %d, fs: %d\n", (int)pthread_self(),total_bytes_rx, thr_pkt.file_size );
 
 
-            ASSERT(n != 0);
-            if(n == ERROR){
-                continue;
-            }
-            
+            ASSERT(n != -1);
+            ASSERT(n == sizeof(thr_pkt));
     
             
 
@@ -116,21 +137,28 @@ ssize_t handle_with_cache(gfcontext_t *ctx, char *path, void* arg)
             }
             
             total_bytes_rx += thr_pkt.chunk_size;
+            
+            ASSERT(total_bytes_rx <= thr_pkt.file_size);
             if(total_bytes_rx == thr_pkt.file_size){
                 fprintf(stderr,"Transfer Complete!\n");
                 fprintf(stderr,"----------------------\n");
             }
             
-            send_message(tx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), 0);
+            //Send ack
+            send_message(tx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), thr_pkt.segment_index);
         }
     }
     while(total_bytes_rx < thr_pkt.file_size);
     
     //fprintf(stderr,"File received, bytes = %d, file_size = %lu\n", total_bytes_received, file_size);
 
-
+    pthread_mutex_lock(&seg_mutex);
+    steque_push(segment_q, seg);
     
-    return 0;
+    pthread_cond_signal(&seg_cond);
+    pthread_mutex_unlock(&seg_mutex);
+    
+    return 0;  //TODO zero or bytes_rx?
 }
 
 /*
