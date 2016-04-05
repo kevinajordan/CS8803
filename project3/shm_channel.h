@@ -23,6 +23,7 @@ plus EXIT_SUCCESS and EXIT_FAILURE constants */
 #define ERROR (-1)
 #define MAX_SEG 10
 #define MAX_CACHE_REQUEST_LEN 256
+#define MAX_MSG_QUEUE_NAME    32
 
 
 typedef struct ctrl_msg{
@@ -35,6 +36,8 @@ typedef struct segment_item{
     int   segment_index;
     char* segment_id;
     void* segment_ptr;
+    mqd_t ctrl_mq_tx;
+    mqd_t ctrl_mq_rx;
 }segment_item;
 
 
@@ -57,8 +60,8 @@ void receive_message(mqd_t _mqd, char* _buffer);
 struct mq_attr get_queue_attr(mqd_t _mqd);
 
 
-void  shm_create_segments(steque_t* segment_q, int _num_segments, int _segment_size);
-char* shm_init_id(int _index);
+void  shm_create_segments(steque_t* segment_q, int _num_segments, int _segment_size, int _proxy_bool);
+char* shm_create_id(char* _prefix, int _index);
 void* shm_map_segment(char* _segment_id, int _segment_size);
 
 

@@ -104,15 +104,19 @@ int main(int argc, char **argv) {
     ctrl.segment_size = segment_size;
   
     /* SHM initialization...*/
-    char* txq = "/proxy-to-cache";
+    /*char* txq = "/proxy-to-cache";
     char* rxq = "/cache-to-proxy";
+    */
     char* cxq_tx = "/control-proxy-cache";
     char* cxq_rx = "/control-cache-proxy";
 
-
     // for(int i = 0; i < nworkerthreads)
-    tx_mqd = create_message_queue(txq, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
-    rx_mqd = create_message_queue(rxq, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
+    //tx_mqd = create_message_queue(txq, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
+    //rx_mqd = create_message_queue(rxq, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
+    
+    
+    
+    //---------------- Sync ------------------
     ctrl_tx_mqd = create_message_queue(cxq_tx, O_CREAT | O_RDWR,  sizeof(ctrl_msg), MAX_MSGS);
     ctrl_rx_mqd = create_message_queue(cxq_rx, O_CREAT | O_RDWR,  sizeof(ctrl_msg), MAX_MSGS);
 
@@ -129,10 +133,16 @@ int main(int argc, char **argv) {
     
     mq_close(ctrl_tx_mqd);
     mq_close(ctrl_rx_mqd);
+    //---------------- Sync ------------------
+   
+    //mq_unlink(txq);
+    //mq_unlink(rxq);
+    
+    
     
     
     steque_t* segment_q = (steque_t*) malloc(sizeof(steque_t));
-    shm_create_segments(segment_q, ctrl.num_segments, ctrl.segment_size);
+    shm_create_segments(segment_q, ctrl.num_segments, ctrl.segment_size, 1);
     
     
     //segment_item* seg = (segment_item*) steque_front(segment_q);
@@ -152,6 +162,5 @@ int main(int argc, char **argv) {
     /*Loops forever*/
     gfserver_serve(&gfs);
 
-    mq_unlink(txq);
-    mq_unlink(rxq);
+
 }

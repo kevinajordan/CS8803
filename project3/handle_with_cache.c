@@ -12,8 +12,8 @@
 
 #define MAX_THRD 50
 
-extern mqd_t tx_mqd;
-extern mqd_t rx_mqd;
+//extern mqd_t ctrl_mq_tx;
+//extern mqd_t ctrl_mq_rx;
 extern pthread_mutex_t  seg_mutex;
 extern pthread_cond_t   seg_cond;
 extern steque_t         seg_queue;
@@ -96,14 +96,14 @@ ssize_t handle_with_cache(gfcontext_t *ctx, char *path, void* arg)
 
     fprintf(stderr,"----------------------\n");
     fprintf(stderr,"Sending tx request.. seg idx=%d, thr_id=%x path: %s\n", thr_pkt.segment_index, (int)pthread_self(), thr_pkt.requested_file);
-    send_message(tx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), ctrl_priority);
+    send_message(seg->ctrl_mq_tx, (void*)&thr_pkt, sizeof(thr_pkt), ctrl_priority);
 
     do{
         if(state == SM_GET_FILESIZE){
             //clock_gettime(CLOCK_REALTIME, &timeout);
             //timeout.tv_sec += 3;
             fprintf(stderr, "Wainting for response (cache hit/miss)...\n");
-            n = mq_receive(rx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), &thr_pkt.segment_index); //&timeout);
+            n = mq_receive(seg->ctrl_mq_rx, (void*)&thr_pkt, sizeof(thr_pkt), &thr_pkt.segment_index); //&timeout);
             
             //memset(seg->segment_ptr, 0, thr_pkt.segment_size);
             //       fprintf(stderr, "Reading Segment: %s \n", (char*)seg->segment_ptr);
@@ -120,7 +120,7 @@ ssize_t handle_with_cache(gfcontext_t *ctx, char *path, void* arg)
         else if(state == SM_GET_DATA){
             //fprintf(stderr,"Waiting on data response.. ");
 
-            n = mq_receive(rx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), &thr_pkt.segment_index); //&timeout);
+            n = mq_receive(seg->ctrl_mq_rx, (void*)&thr_pkt, sizeof(thr_pkt), &thr_pkt.segment_index); //&timeout);
             
             fprintf(stderr,"Rx id: %x, c: %d, fs: %d\n", (int)pthread_self(),total_bytes_rx, thr_pkt.file_size );
 
@@ -145,7 +145,7 @@ ssize_t handle_with_cache(gfcontext_t *ctx, char *path, void* arg)
             }
             
             //Send ack
-            send_message(tx_mqd, (void*)&thr_pkt, sizeof(thr_pkt), thr_pkt.segment_index);
+            send_message(seg->ctrl_mq_tx, (void*)&thr_pkt, sizeof(thr_pkt), thr_pkt.segment_index);
         }
     }
     while(total_bytes_rx < thr_pkt.file_size);

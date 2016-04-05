@@ -78,30 +78,52 @@ void receive_message(mqd_t _mqd, char* _buffer){
 /*----------------- Segments --------------------*/
 
 
-void shm_create_segments(steque_t* _segment_queue, int _num_segments, int _segment_size){
+void shm_create_segments(steque_t* _segment_queue, int _num_segments, int _segment_size, int _proxy){
     steque_init(_segment_queue);
+    char* tx_prefix;
+    char* rx_prefix;
     
     for (int i = 0; i < _num_segments; i++) {
-        char* segment_id = shm_init_id(i);
+        segment_item* shm_info_item = malloc(sizeof(segment_item));
+
+        char* segment_id = shm_create_id(shm_path, i);
         void* segment_mem = shm_map_segment(segment_id, _segment_size);
 
-        segment_item* shm_info_item = malloc(sizeof(segment_item));
+        
+        if(_proxy){
+            tx_prefix = "/proxy-to-cache";
+            rx_prefix = "/cache-to-proxy";
+        }
+        else{
+            rx_prefix = "/proxy-to-cache";
+            tx_prefix = "/cache-to-proxy";
+        }
+        
+        char* mq_tx_str = shm_create_id(tx_prefix, i);
+        char* mq_rx_str = shm_create_id(rx_prefix, i);
+        fprintf(stderr, "tx mq: %s\n", mq_tx_str);
+
+        shm_info_item->ctrl_mq_tx = create_message_queue(mq_tx_str, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
+        shm_info_item->ctrl_mq_rx = create_message_queue(mq_rx_str, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
         shm_info_item->segment_ptr = segment_mem;
         shm_info_item->segment_id = segment_id;
         shm_info_item->segment_index = i;
         steque_push(_segment_queue, shm_info_item);
+        
+        //mq_unlink(mq_tx_str);
+        //mq_unlink(mq_rx_str);
     }
 }
 
 
-char* shm_init_id(int _index){
+char* shm_create_id(char* _prefix, int _index){
     char index_str[MAX_SEG];
     sprintf(index_str, "%d", _index);
-    char* segment_id = malloc(strlen(shm_path) +strlen(index_str) + 1);
-    strcpy(segment_id, shm_path);
-    strcat(segment_id, index_str);
+    char* id = malloc(strlen(shm_path) +strlen(index_str) + 1);
+    strcpy(id, _prefix);
+    strcat(id, index_str);
     
-    return segment_id;
+    return id;
 }
 
 
