@@ -40,8 +40,8 @@ static gfserver_t gfs;
 
 mqd_t tx_mqd;
 mqd_t rx_mqd;
-mqd_t ctrl_tx_mqd;
-mqd_t ctrl_rx_mqd;
+mqd_t ctrl_mq_tx;
+mqd_t ctrl_mq_rx;
 
 pthread_mutex_t seg_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t  seg_cond  = PTHREAD_COND_INITIALIZER;
@@ -117,26 +117,34 @@ int main(int argc, char **argv) {
     
     
     //---------------- Sync ------------------
-    ctrl_tx_mqd = create_message_queue(cxq_tx, O_CREAT | O_RDWR,  sizeof(ctrl_msg), MAX_MSGS);
-    ctrl_rx_mqd = create_message_queue(cxq_rx, O_CREAT | O_RDWR,  sizeof(ctrl_msg), MAX_MSGS);
+    ctrl_mq_tx = create_message_queue(cxq_tx, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
+    ctrl_mq_rx = create_message_queue(cxq_rx, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
+
 
     
+    
     printf("sending ctrl\n");
-    int status = mq_send(ctrl_tx_mqd, (char*)&ctrl, sizeof(ctrl_msg), 0);
+    int status = mq_send(ctrl_mq_tx, (char*)&ctrl, sizeof(thread_packet), 0);
     ASSERT(status >= 0);
     
     printf("rx ctrl\n");
 
-    status = mq_receive(ctrl_rx_mqd, (char*)&ctrl, sizeof(ctrl_msg), 0);
+    status = mq_receive(ctrl_mq_rx, (char*)&ctrl, sizeof(thread_packet), 0);
     ASSERT(status >= 0);
     
     
-    mq_close(ctrl_tx_mqd);
-    mq_close(ctrl_rx_mqd);
+    struct mq_attr attr;
+    mq_getattr(ctrl_mq_tx, &attr);
+    attr.mq_msgsize = sizeof(thread_packet);
+    status = mq_setattr(ctrl_mq_tx, &attr, NULL); ASSERT(status != -1);
+    status = mq_setattr(ctrl_mq_rx, &attr, NULL); ASSERT(status != -1);
+    
+    //TODO: Add as gfclient_cleanup
+
     //---------------- Sync ------------------
    
-    //mq_unlink(txq);
-    //mq_unlink(rxq);
+    mq_unlink(cxq_tx);
+    mq_unlink(cxq_rx);
     
     
     
@@ -161,6 +169,8 @@ int main(int argc, char **argv) {
 
     /*Loops forever*/
     gfserver_serve(&gfs);
-
+    
+    mq_close(ctrl_mq_tx);
+    mq_close(ctrl_mq_rx);
 
 }

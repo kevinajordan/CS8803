@@ -36,8 +36,8 @@ typedef struct segment_item{
     int   segment_index;
     char* segment_id;
     void* segment_ptr;
-    mqd_t ctrl_mq_tx;
-    mqd_t ctrl_mq_rx;
+    mqd_t mq_data_tx;
+    mqd_t mq_data_rx;
 }segment_item;
 
 
@@ -52,6 +52,12 @@ typedef struct thread_packet{
     unsigned int segment_index;
 }thread_packet;
 
+
+typedef struct thread_info_t {
+    int         thread_num;   //Index
+    pthread_t   thread_id;    //ID
+    char*       name;
+}thread_info_t;
 
 
 mqd_t create_message_queue(char* _name, int _flags, int _msg_sz, int _max_msgs);
@@ -69,6 +75,12 @@ void* shm_map_segment(char* _segment_id, int _segment_size);
 /* Below helper macro was copied from
 http://stackoverflow.com/questions/3056307/how-do-i-use-mqueue-in-a-c-program-on-a-linux-based-system
 */
+
+
+
+#define DEBUG 1
+
+
 #define ASSERT(x) \
 do { \
 if (!(x)) { \
@@ -77,6 +89,17 @@ perror(#x); \
 exit(-1); \
 } \
 } while (0) \
+
+
+
+
+/* Below helper macro was copied from
+   http://stackoverflow.com/questions/1644868/c-define-macro-for-debug-printing
+ */
+
+#define dbg(fmt, ...) \
+do { if (DEBUG) fprintf(stderr, "%s:%d:%s(): " fmt, __FILE__, \
+__LINE__, __func__, ##__VA_ARGS__); } while (0)
 
 
 

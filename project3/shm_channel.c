@@ -44,16 +44,14 @@ struct mq_attr get_queue_attr(mqd_t _mqd){
 
 
 void send_message(mqd_t _mqd, void* _msg, int _msg_len, unsigned int priority){
+    struct mq_attr attr;
+    mq_getattr(_mqd, &attr);
+    //attr.mq_msgsize = sizeof(thread_packet);
+    //mq_setattr(ctrl_mq_tx, &attr, NULL);
+    //mq_setattr(ctrl_mq_rx, &attr, NULL);
     
     int status = mq_send(_mqd, _msg, _msg_len, priority);
-    //ASSERT(status == 0);
-    if(status < 0){
-        //fprintf(stderr,"ERROR: mq_send()\n");
-        exit(EXIT_FAILURE);
-    }
-    
-    ////fprintf(stderr,"Message sent..\nPath: -%s-, Length: %d\n", _msg, _msg_len);
-    
+    ASSERT(status >= 0);
 }
 
 
@@ -103,8 +101,8 @@ void shm_create_segments(steque_t* _segment_queue, int _num_segments, int _segme
         char* mq_rx_str = shm_create_id(rx_prefix, i);
         fprintf(stderr, "tx mq: %s\n", mq_tx_str);
 
-        shm_info_item->ctrl_mq_tx = create_message_queue(mq_tx_str, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
-        shm_info_item->ctrl_mq_rx = create_message_queue(mq_rx_str, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
+        shm_info_item->mq_data_tx = create_message_queue(mq_tx_str, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
+        shm_info_item->mq_data_rx = create_message_queue(mq_rx_str, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
         shm_info_item->segment_ptr = segment_mem;
         shm_info_item->segment_id = segment_id;
         shm_info_item->segment_index = i;
