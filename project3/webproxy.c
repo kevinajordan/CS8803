@@ -42,6 +42,8 @@ mqd_t tx_mqd;
 mqd_t rx_mqd;
 mqd_t ctrl_mq_tx;
 mqd_t ctrl_mq_rx;
+char* cmq_tx_str = "/control-proxy-cache";
+char* cmq_rx_str = "/control-cache-proxy";
 
 pthread_mutex_t seg_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t  seg_cond  = PTHREAD_COND_INITIALIZER;
@@ -104,58 +106,27 @@ int main(int argc, char **argv) {
     ctrl.segment_size = segment_size;
   
     /* SHM initialization...*/
-    /*char* txq = "/proxy-to-cache";
-    char* rxq = "/cache-to-proxy";
-    */
-    char* cxq_tx = "/control-proxy-cache";
-    char* cxq_rx = "/control-cache-proxy";
 
-    // for(int i = 0; i < nworkerthreads)
-    //tx_mqd = create_message_queue(txq, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
-    //rx_mqd = create_message_queue(rxq, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
-    
-    
+
+
     
     //---------------- Sync ------------------
-    ctrl_mq_tx = create_message_queue(cxq_tx, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
-    ctrl_mq_rx = create_message_queue(cxq_rx, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
+    ctrl_mq_tx = create_message_queue(cmq_tx_str, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
+    ctrl_mq_rx = create_message_queue(cmq_rx_str, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
+    
 
 
+    tx_mq(ctrl_mq_tx, (char*)&ctrl, sizeof(thread_packet));
+    rx_mq(ctrl_mq_rx, (char*)&ctrl, sizeof(thread_packet));
     
-    
-    printf("sending ctrl\n");
-    int status = mq_send(ctrl_mq_tx, (char*)&ctrl, sizeof(thread_packet), 0);
-    ASSERT(status >= 0);
-    
-    printf("rx ctrl\n");
 
-    status = mq_receive(ctrl_mq_rx, (char*)&ctrl, sizeof(thread_packet), 0);
-    ASSERT(status >= 0);
-    
-    
-    struct mq_attr attr;
-    mq_getattr(ctrl_mq_tx, &attr);
-    attr.mq_msgsize = sizeof(thread_packet);
-    status = mq_setattr(ctrl_mq_tx, &attr, NULL); ASSERT(status != -1);
-    status = mq_setattr(ctrl_mq_rx, &attr, NULL); ASSERT(status != -1);
-    
-    //TODO: Add as gfclient_cleanup
 
     //---------------- Sync ------------------
    
-    mq_unlink(cxq_tx);
-    mq_unlink(cxq_rx);
-    
-    
     
     
     steque_t* segment_q = (steque_t*) malloc(sizeof(steque_t));
     shm_create_segments(segment_q, ctrl.num_segments, ctrl.segment_size, 1);
-    
-    
-    //segment_item* seg = (segment_item*) steque_front(segment_q);
-    //fprintf(stderr, "Segment = %s\n", seg->segment_id);
-
 
     /*Initializing server*/
     gfserver_init(&gfs, nworkerthreads);
@@ -169,6 +140,9 @@ int main(int argc, char **argv) {
 
     /*Loops forever*/
     gfserver_serve(&gfs);
+    
+    mq_unlink(cmq_tx_str);
+    mq_unlink(cmq_rx_str);
     
     mq_close(ctrl_mq_tx);
     mq_close(ctrl_mq_rx);

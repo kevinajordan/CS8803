@@ -11,6 +11,8 @@
 #include "shm_channel.h"
 
 #define MAX_THRD 50
+#define CONT 0
+#define END  1
 
 extern mqd_t ctrl_mq_tx;
 extern mqd_t ctrl_mq_rx;
@@ -18,110 +20,101 @@ extern pthread_mutex_t  seg_mutex;
 extern pthread_cond_t   seg_cond;
 extern steque_t         seg_queue;
 
-   
-ssize_t handle_with_cache(gfcontext_t *ctx, char *path, void* arg)
-{
-  
-    thread_packet thr_pkt;
-    memcpy(thr_pkt.requested_file, path, strlen(path));
-    thr_pkt.segment_size = 0, thr_pkt.chunk_size = 0;
-    steque_t* segment_q = (steque_t*) arg;
-    int gfs_bytes_sent;
-    //num_segments = steque_size(segment_q);
-
-    
-    int n, total_bytes_rx = 0;
-    enum sm state = SM_GET_FILESIZE;
-    
-    
-    /* Get the next available segment, thread-safe */
+/* Get the next available segment, function is thread-safe */
+segment_item* acquire_segment(steque_t* _segment_q){
     pthread_mutex_lock(&seg_mutex);
-
-    while(steque_isempty(segment_q))
+    
+    while(steque_isempty(_segment_q))
         pthread_cond_wait(&seg_cond, &seg_mutex);
-
-    segment_item* seg = steque_pop(segment_q);
+    
+    segment_item* seg = steque_pop(_segment_q);
     pthread_mutex_unlock(&seg_mutex);
     
-    
-    dbg("Thread processing.. thr_id=%x path: %s\n", (int)pthread_self(), thr_pkt.requested_file);
-    
 
+    return seg;
+}
+
+/* Release segment by pushing it back to queue */
+void release_segment(steque_t* _segment_q, segment_item* _seg){
+    pthread_mutex_lock(&seg_mutex);
+    steque_push(_segment_q, _seg);
     
-    //Send request, inform cache of the segment to use
-    thr_pkt.segment_index = seg->segment_index;
+    pthread_cond_signal(&seg_cond);
+    pthread_mutex_unlock(&seg_mutex);
+}
 
-    send_message(ctrl_mq_tx, (void*)&thr_pkt, sizeof(thr_pkt), 0);
-    dbg("Sending tx request.. seg idx=%d, thr_id=%x path: %s\n", thr_pkt.segment_index, (int)pthread_self(), thr_pkt.requested_file);
 
+int wait_for_filesize(gfcontext_t* _ctx, thread_packet* _thr_pkt, segment_item* _seg, enum sm *_state, int *ret_value){
+    int ret = CONT;
+    //clock_gettime(CLOCK_REALTIME, &timeout);
+    //timeout.tv_sec += 3;
+    rx_mq(_seg->mq_data_rx, (void*)_thr_pkt, sizeof(thread_packet));
+    
+    if(_thr_pkt->cache_hit){
+        gfs_sendheader(_ctx, GF_OK, _thr_pkt->file_size);
+        *_state = SM_GET_DATA;
+    }
+    else{
+        *ret_value = gfs_sendheader(_ctx, GF_FILE_NOT_FOUND, 0);
+        ret = END;
+    }
+    
+    return ret;
+}
+
+
+
+int handle_request(gfcontext_t* _ctx, segment_item* _seg, char* _path){
+    thread_packet thr_pkt;
+    memcpy(thr_pkt.requested_file, _path, MAX_REQUEST_LEN);
+    int ret_value, total_bytes_rx = 0;
+    enum sm state = SM_GET_FILESIZE;
+    thr_pkt.segment_size = 0, thr_pkt.chunk_size = 0;
+    thr_pkt.segment_index = _seg->segment_index;
+
+    /* Send request, inform cache of the segment to use */
+    tx_mq(ctrl_mq_tx, (void*)&thr_pkt, sizeof(thr_pkt));
+    
     
     do{
         if(state == SM_GET_FILESIZE){
-            //clock_gettime(CLOCK_REALTIME, &timeout);
-            //timeout.tv_sec += 3;
-            //dbg( "Wainting for response (cache hit/miss)...\n");
-            n = mq_receive(seg->mq_data_rx, (void*)&thr_pkt, sizeof(thr_pkt), 0); //&timeout);
-
-            ASSERT(n != ERROR);
-
-            dbg("Received response: hit/miss: %d, file size = %d, seg: %d\n", thr_pkt.cache_hit, thr_pkt.file_size, thr_pkt.segment_index);
-            
-            if(thr_pkt.cache_hit){
-                gfs_sendheader(ctx, GF_OK, thr_pkt.file_size);
-                state = SM_GET_DATA;
-            }
-            else{
-                pthread_mutex_lock(&seg_mutex);
-                steque_push(segment_q, seg);
-                
-                pthread_cond_signal(&seg_cond);
-                pthread_mutex_unlock(&seg_mutex);
-                return gfs_sendheader(ctx, GF_FILE_NOT_FOUND, 0);
-            }
+            int flow = wait_for_filesize(_ctx, &thr_pkt, _seg, &state, &ret_value);
+            if(flow == END) break;
         }
         else if(state == SM_GET_DATA){
-            n = mq_receive(seg->mq_data_rx, (void*)&thr_pkt, sizeof(thr_pkt), 0); //&timeout);
+            rx_mq(_seg->mq_data_rx, (void*)&thr_pkt, sizeof(thr_pkt));
             
-            dbg("seg:%d, mq_rx=%d, thread id: %x, T: %d, c=%d, fs: %d\n", seg->segment_index, seg->mq_data_rx, (int)pthread_self(), total_bytes_rx, thr_pkt.chunk_size, thr_pkt.file_size);
-
-
-            ASSERT(n != -1);
-            ASSERT(n == sizeof(thr_pkt));
-    
-            
-
-            gfs_bytes_sent = gfs_send(ctx, seg->segment_ptr, thr_pkt.chunk_size);
-            if (gfs_bytes_sent != thr_pkt.chunk_size){
-                dbg("seg=%d, gfs_bytes_sent != bytes_received\n", thr_pkt.segment_index);
-                return EXIT_FAILURE;
-            }
-            
-            fprintf(stderr, "seg:%d, thr %x, ctx->file_len: %zu\n", seg->segment_index, (int)pthread_self(), ctx->file_len);
-            fprintf(stderr, "seg:%d, thread id: %xctx->bytes_transferred: %zu\n", seg->segment_index,(int)pthread_self(), ctx->bytes_transferred);
+            int gfs_nbytes = gfs_send(_ctx, _seg->segment_ptr, thr_pkt.chunk_size);
+            ASSERT(gfs_nbytes == thr_pkt.chunk_size);
             
             total_bytes_rx += thr_pkt.chunk_size;
-            
-            ASSERT(total_bytes_rx <= thr_pkt.file_size);
-            if(total_bytes_rx == thr_pkt.file_size){
-                dbg("seg=%d, mq_tx=%d, Transfer Complete...\n", seg->segment_index, seg->mq_data_tx);
-            }
-            
+            ret_value = total_bytes_rx;
             //Send ack
-            send_message(seg->mq_data_tx, (void*)&thr_pkt, sizeof(thr_pkt), 0);
+            tx_mq(_seg->mq_data_tx, (void*)&thr_pkt, sizeof(thr_pkt));
         }
     }
     while(total_bytes_rx < thr_pkt.file_size);
 
-    
-    fprintf(stderr, "%s%zu\n", "ctx->file_len: ", ctx->file_len);
-    fprintf(stderr, "%s%zu\n", "ctx->bytes_transferred: ", ctx->bytes_transferred);
-    
-    //ASSERT(thr_pkt.file_size == total_bytes_rx);
-    pthread_mutex_lock(&seg_mutex);
-    steque_push(segment_q, seg);
-    
-    pthread_cond_signal(&seg_cond);
-    pthread_mutex_unlock(&seg_mutex);
-    
-    return total_bytes_rx;
+    return ret_value;
 }
+
+
+
+
+ssize_t handle_with_cache(gfcontext_t* _ctx, char* _path, void* _arg){
+    steque_t* segment_q = (steque_t*) _arg;
+    int nbytes;
+
+    /* Acquire shared-memory segment */
+    segment_item* seg = acquire_segment(segment_q);
+    
+    /* Process incoming server request */
+    nbytes = handle_request(_ctx, seg, _path);
+    
+    /* Release shared-memory segment */
+    release_segment(segment_q, seg);
+
+    return nbytes;
+}
+
+

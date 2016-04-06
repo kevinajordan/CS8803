@@ -18,8 +18,11 @@ pthread_cond_t  seg_cond = PTHREAD_COND_INITIALIZER;
 
 ctrl_msg ctrl;
 steque_t* segment_q;
-mqd_t cx_mqd_tx;
-mqd_t cx_mqd_rx;
+mqd_t cmq_tx_fd;
+mqd_t cmq_rx_fd;
+char* cmq_tx_str = "/control-cache-proxy";
+char* cmq_rx_str = "/control-proxy-cache";
+
 
 static void _sig_handler(int signo){
 	if (signo == SIGINT || signo == SIGTERM){
@@ -48,10 +51,12 @@ void Usage() {
   fprintf(stdout, "%s", USAGE);
 }
 
-void perform_task(void* _thread_info);
-void send_file(mqd_t _ctrl_mq_tx, mqd_t _ctrl_mq_rx, int _fd, thread_packet thr_pkt, segment_item* seg);
-thread_info_t* init_threads(int _num_threads);
-
+void  perform_task(void* _thread_info);
+void  send_file(mqd_t _ctrl_mq_tx, mqd_t _ctrl_mq_rx, int _fd, thread_packet thr_pkt, segment_item* seg);
+thread_info_t*  init_threads(int _num_threads);
+void  clean_control_mq(char* cmq_tx_str, char* cmq_rx_str, int cmq_tx_fd, int cmq_rx_fd);
+void   sync_with_proxy();
+segment_item* find_segment(int index, int* found);
 
 
 int main(int argc, char **argv) {
@@ -92,105 +97,77 @@ int main(int argc, char **argv) {
 	/* Initializing the cache */
 	simplecache_init(cachedir);
     
-    char* cxq_tx = "/control-cache-proxy";
-    char* cxq_rx = "/control-proxy-cache";
-
+    /* Two-way handshake sync */
+    sync_with_proxy();
     
-    cx_mqd_tx = create_message_queue(cxq_tx, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
-    cx_mqd_rx = create_message_queue(cxq_rx, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
-    
-    
-    
-    printf("rx ctrl\n");
-    int status= mq_receive(cx_mqd_rx, (char*)&ctrl, sizeof(thread_packet), 0);
-    printf("status =%d\n", status);
-    ASSERT(status >= 0);
-    
-    printf("sending ctrl\n");
-    status = mq_send(cx_mqd_tx, (char*)&ctrl, sizeof(thread_packet), 0);
-    ASSERT(status >= 0);
-    
-    mq_unlink(cxq_tx);
-    mq_unlink(cxq_rx);
-    
-    //mq_close(cx_mqd_tx);
-    //mq_close(cx_mqd_rx);
-    
-    
+    /* Create shared memory segments */
     segment_q = (steque_t*) malloc(sizeof(steque_t));
     shm_create_segments(segment_q, ctrl.num_segments, ctrl.segment_size, 0);
     
+    /* Initialize and run threads, each calls 'perform_task()' */
     thread_info_t* tinfo = init_threads(nthreads);
+    
+    //Pthread_join calls each thread's exit routine
     for(int i = 0; i < nthreads; i++){
         pthread_join(tinfo[i].thread_id, NULL);
     }
+    
+    /* Clean up allocated memory */
+    clean_control_mq(cmq_tx_str, cmq_rx_str, cmq_tx_fd, cmq_rx_fd);
+    shm_clean_segments();
+    free(tinfo);
+
+}
+
+/* A requests itself lest the cache now what segment to use when
+ * sending the response.  We need to find this segment in our 
+ * segment queue.  No need to worry about thread-safety because
+ * proxy guarantees to use only one segment at a time */
+segment_item* find_segment(int index, int* found){
+    int i = 0;
+    segment_item* seg = NULL;
+    *found = 0;
+    while(i < ctrl.num_segments){
+        seg = (segment_item*)steque_front(segment_q);
+        steque_cycle(segment_q);
+        if(seg->segment_index == index){
+            *found = 1;
+            break;
+        }
+    }
+    return seg;
 }
 
 /* Function call by individual threads.  Threads atomically
  * dequeue segments from the segement queue and perform
  * file transfer if file is present in cache */
 void perform_task(void* _thread_info){
-    thread_info_t *thread_info = _thread_info;
-    printf("ID: %d\n", thread_info->thread_num);
     char len[MAX_LEN];
-    //char* rxq = "/proxy-to-cache";
-    //char* txq = "/cache-to-proxy";
-
-    //dbg("Ctrl, seg_size=%d, num_seg=%d\n", ctrl.segment_size, ctrl.num_segments);
-    
-    
-    /* Get the next available segment, thread-safe
-    pthread_mutex_lock(&seg_mutex);
-    
-    while(steque_isempty(segment_q))
-        pthread_cond_wait(&seg_cond, &seg_mutex);
-    
-    pthread_mutex_unlock(&seg_mutex);
-    */
+    int found;
     segment_item* seg;
-
-    
-    //= (segment_item*) steque_front(segment_q
-    
-    //dbg("Segment id = %s\n", seg->segment_id);
     thread_packet thr_pkt;
-    
 
-    
-    
     while(1){
-        //Get request
-        int bytes_received = mq_receive(cx_mqd_rx, (void*)&thr_pkt, sizeof(thr_pkt), 0);
+        //Wait to receive request from client
+        rx_mq(cmq_rx_fd, (void*)&thr_pkt, sizeof(thr_pkt));
 
         thr_pkt.segment_size = ctrl.segment_size;
         thr_pkt.chunk_size = -1;
         
-        
-        ASSERT(bytes_received >= 0);
+        /* Lookup cache */
         int fd = simplecache_get(thr_pkt.requested_file);
+
+        /* Get shared memory segment */
+        seg = find_segment(thr_pkt.segment_index, &found);
+        ASSERT(found);
+
         dbg("Rx request.. seg idx=%d, thr_id=%x path: %s\n", thr_pkt.segment_index, (int)pthread_self(), thr_pkt.requested_file);
-        
-        
-        
-        
-        int i = 0;
-        int found = 0;
-        while(i < ctrl.num_segments){
-            seg = (segment_item*)steque_front(segment_q);
-            steque_cycle(segment_q);
-            if(seg->segment_index == thr_pkt.segment_index){
-                found = 1;
-                break;
-            }
-        }
-        
-        
         
         if(fd == -1){
             thr_pkt.cache_hit = 0;
             thr_pkt.file_size = 0;
             dbg("File not found in cache\n");
-            send_message(seg->mq_data_tx, (void*)&thr_pkt, sizeof(thr_pkt), thr_pkt.segment_index);
+            tx_mq(seg->mq_data_tx, (void*)&thr_pkt, sizeof(thr_pkt));
         }
         else{
             unsigned file_size = lseek(fd, 0, SEEK_END); ASSERT(file_size > 0);
@@ -200,12 +177,9 @@ void perform_task(void* _thread_info){
             thr_pkt.cache_hit = 1;
             thr_pkt.file_size = atoi(len);
             
-            //dbg("Sending request ACK..\n");
-            send_message(seg->mq_data_tx, (void*)&thr_pkt, sizeof(thr_pkt), thr_pkt.segment_index);
+            /* Send ACK, client can then read shared-memory segment */
+            tx_mq(seg->mq_data_tx, (void*)&thr_pkt, sizeof(thr_pkt));
             
-
-            
-            ASSERT(found);
             
             
             send_file(seg->mq_data_tx, seg->mq_data_rx, fd, thr_pkt, seg);
@@ -258,14 +232,12 @@ void send_file(mqd_t _ctrl_mq_tx, mqd_t _ctrl_mq_rx, int _fd, thread_packet thr_
 
         thr_pkt.chunk_size = n;
         ASSERT(thr_pkt.chunk_size <= thr_pkt.segment_size);
-        send_message(_seg->mq_data_tx, (void*)&thr_pkt, sizeof(thr_pkt), 0);
+        tx_mq(_seg->mq_data_tx, (void*)&thr_pkt, sizeof(thr_pkt));
 
         total_bytes_rx += n;
-        dbg("4) seg: %d, n: %d, fs: %d, chunk: %d, offset:%d, %d/%d..\n", _seg->segment_index, n, thr_pkt.file_size, thr_pkt.chunk_size, offset, total_bytes_rx, thr_pkt.file_size);
 
-        //dbg("Waiting for data ACK\n");
-        n = mq_receive(_seg->mq_data_rx, (void*)&thr_pkt, sizeof(thr_pkt), 0);
-        ASSERT(n >= 0);
+        //Wait until client reads the data and send an ACK back to the cache
+        rx_mq(_seg->mq_data_rx, (void*)&thr_pkt, sizeof(thr_pkt));
         
     }
 }
@@ -291,6 +263,29 @@ thread_info_t* init_threads(int _num_threads){
     pthread_attr_destroy(&attributes);
     
     return thread_info;
+}
+
+
+/* Function makes sure both processes are ready to process req/resps */
+void sync_with_proxy(){
+    cmq_tx_fd = create_message_queue(cmq_tx_str, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
+    cmq_rx_fd = create_message_queue(cmq_rx_str, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
+    
+    /* Two-way handshake sync */
+    rx_mq(cmq_rx_fd, (char*)&ctrl, sizeof(thread_packet));
+    tx_mq(cmq_tx_fd, (char*)&ctrl, sizeof(thread_packet));
+}
+
+
+/* Clean up control message queues */
+void clean_control_mq(char* cmq_tx_str, char* cmq_rx_str, int cmq_tx_fd, int cmq_rx_fd){
+    int n = mq_unlink(cmq_tx_str);
+    ASSERT(n == 0);
+    n = mq_unlink(cmq_rx_str);
+    ASSERT(n == 0);
+    
+    mq_close(cmq_tx_fd);
+    mq_close(cmq_rx_fd);
 }
 
 

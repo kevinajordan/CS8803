@@ -4,76 +4,46 @@
 char* shm_path = "/segment";
 
 
+/*----------------------- MQ  Helper Functions --------------------*/
+
 mqd_t create_message_queue(char* _name, int _flags, int _msg_sz, int _max_msgs){
     struct mq_attr attr;
     attr.mq_flags = 0;
     attr.mq_curmsgs = 0;
-    //fprintf(stderr, "queue msg size = %d\n", _msg_sz);
     attr.mq_msgsize = _msg_sz;
     attr.mq_maxmsg = 9;
     
     // Open a queue with the attribute structure
     mqd_t mqd = mq_open (_name, _flags, 0644, &attr);
-    
-    if(mqd == (mqd_t)-1){
-        //fprintf(stderr,"ERROR: mq_open()\n");
-        exit(EXIT_FAILURE);
-    }
+    ASSERT(mqd != ((mqd_t)-1));
 
-    
-    //struct mq_attr attr;
-
-    //if(mq_getattr (_mqd, &attr)){
-    ////fprintf(stderr,"Maximum # of messages on queue: %ld\n", attr.mq_maxmsg);
-    ////fprintf(stderr,"Maximum message size: %ld\n", attr.mq_msgsize);
-    ////fprintf(stderr,"# of messages currently on queue: %ld\n", attr.mq_curmsgs);
-    
     return mqd;
+}
+
+
+
+void tx_mq(mqd_t _mqd, void* _msg, int _msg_len){
+    int status = mq_send(_mqd, _msg, _msg_len, 0);
+    ASSERT(status == 0);
+}
+
+void rx_mq(mqd_t _mqd, void* _msg, int _msg_len){
+    int bytes_received = mq_receive(_mqd, _msg, _msg_len, 0);
+    ASSERT(bytes_received == _msg_len);
 }
 
 
 struct mq_attr get_queue_attr(mqd_t _mqd){
     struct mq_attr attr;
     if(mq_getattr (_mqd, &attr)){
-        //fprintf(stderr,"ERROR: mq_getattr()\n");
         exit(EXIT_FAILURE);
     }
-    
     return attr;
 }
 
 
-void send_message(mqd_t _mqd, void* _msg, int _msg_len, unsigned int priority){
-    struct mq_attr attr;
-    mq_getattr(_mqd, &attr);
-    //attr.mq_msgsize = sizeof(thread_packet);
-    //mq_setattr(ctrl_mq_tx, &attr, NULL);
-    //mq_setattr(ctrl_mq_rx, &attr, NULL);
-    
-    int status = mq_send(_mqd, _msg, _msg_len, priority);
-    ASSERT(status >= 0);
-}
 
-
-
-
-void receive_message(mqd_t _mqd, char* _buffer){
-    //fprintf(stderr,"Waiting to rx message...\n");
-    int bytes_received = mq_receive(_mqd, _buffer, MSG_SIZE, 0);
-    //ASSERT(status == 0);
-    
-    if(bytes_received < 0){
-        //fprintf(stderr,"ERROR: mq_receive()\n");
-        exit(EXIT_FAILURE);
-    }
-    
-    
-    //fprintf(stderr,"Message received..\nPath -%s-, Length: %d\n", _buffer, bytes_received);   
-}
-
-
-
-/*----------------- Segments --------------------*/
+/*----------------- Segments Helper Functions --------------------*/
 
 
 void shm_create_segments(steque_t* _segment_queue, int _num_segments, int _segment_size, int _proxy){
@@ -99,7 +69,7 @@ void shm_create_segments(steque_t* _segment_queue, int _num_segments, int _segme
         
         char* mq_tx_str = shm_create_id(tx_prefix, i);
         char* mq_rx_str = shm_create_id(rx_prefix, i);
-        fprintf(stderr, "tx mq: %s\n", mq_tx_str);
+        dbg("mq: %s\n", mq_tx_str);
 
         shm_info_item->mq_data_tx = create_message_queue(mq_tx_str, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
         shm_info_item->mq_data_rx = create_message_queue(mq_rx_str, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
@@ -107,9 +77,6 @@ void shm_create_segments(steque_t* _segment_queue, int _num_segments, int _segme
         shm_info_item->segment_id = segment_id;
         shm_info_item->segment_index = i;
         steque_push(_segment_queue, shm_info_item);
-        
-        //mq_unlink(mq_tx_str);
-        //mq_unlink(mq_rx_str);
     }
 }
 
@@ -148,6 +115,10 @@ void* shm_map_segment(char* _segment_id, int _segment_size){
 }
 
 
+
+void  shm_clean_segments(){
+    
+}
 
 
 

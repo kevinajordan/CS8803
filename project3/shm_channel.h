@@ -18,11 +18,9 @@ plus EXIT_SUCCESS and EXIT_FAILURE constants */
 
 #define MSG_SIZE 2048
 #define MAX_MSGS 20
-#define NOT_FOUND_PRIORITY 1
-#define HEADER_PRIORITY 2
 #define ERROR (-1)
 #define MAX_SEG 10
-#define MAX_CACHE_REQUEST_LEN 256
+#define MAX_REQUEST_LEN 128
 #define MAX_MSG_QUEUE_NAME    32
 
 
@@ -44,7 +42,7 @@ typedef struct segment_item{
 enum sm{ SM_GET_FILESIZE, SM_GET_DATA};
 
 typedef struct thread_packet{
-    char requested_file [MAX_CACHE_REQUEST_LEN];
+    char requested_file [MAX_REQUEST_LEN];
     int file_size;
     int chunk_size;
     int segment_size;
@@ -61,15 +59,15 @@ typedef struct thread_info_t {
 
 
 mqd_t create_message_queue(char* _name, int _flags, int _msg_sz, int _max_msgs);
-void send_message(mqd_t _mqd, void* _msg, int _msg_len, unsigned int priority);
-void receive_message(mqd_t _mqd, char* _buffer);
+void tx_mq(mqd_t _mqd, void* _msg, int _msg_len);
+void rx_mq(mqd_t _mqd, void* _msg, int _msg_len);
 struct mq_attr get_queue_attr(mqd_t _mqd);
 
 
 void  shm_create_segments(steque_t* segment_q, int _num_segments, int _segment_size, int _proxy_bool);
 char* shm_create_id(char* _prefix, int _index);
 void* shm_map_segment(char* _segment_id, int _segment_size);
-
+void  shm_clean_segments();
 
 
 /* Below helper macro was copied from
@@ -78,7 +76,7 @@ http://stackoverflow.com/questions/3056307/how-do-i-use-mqueue-in-a-c-program-on
 
 
 
-#define DEBUG 1
+#define DEBUG 0
 
 
 #define ASSERT(x) \
