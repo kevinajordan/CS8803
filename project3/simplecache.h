@@ -16,7 +16,7 @@ int simplecache_init(char *filename);
  */
 int simplecache_get(char *key);
 
-/* 
+/*
  * Frees all memory and closes all file descriptors
  * associated with the cache.
  */

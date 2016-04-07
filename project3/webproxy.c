@@ -42,14 +42,24 @@ mqd_t tx_mqd;
 mqd_t rx_mqd;
 mqd_t ctrl_mq_tx;
 mqd_t ctrl_mq_rx;
-char* cmq_tx_str = "/control-proxy-cache";
-char* cmq_rx_str = "/control-cache-proxy";
+steque_t* segment_q;
+char* cmq_tx_str = "/control_proxy_cache";
+char* cmq_rx_str = "/control_cache_proxy";
 
 pthread_mutex_t seg_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t  seg_cond  = PTHREAD_COND_INITIALIZER;
 
 static void _sig_handler(int signo){
   if (signo == SIGINT || signo == SIGTERM){
+      /*Unlink and close 'control' shared MQ */
+      mq_unlink(cmq_tx_str);
+      mq_unlink(cmq_rx_str);
+      mq_close(ctrl_mq_tx);
+      mq_close(ctrl_mq_rx);
+      
+    /* Remove all shared memory segments, and 'header' MQs*/
+    shm_clean_segments(segment_q);
+      
     gfserver_stop(&gfs);
     exit(signo);
   }
@@ -60,8 +70,8 @@ int main(int argc, char **argv) {
   int i, option_char = 0;
   unsigned short port = 8888;
   unsigned short nworkerthreads = 1;
-    int num_segments = 10, segment_size = 1024;
-  //char *server = "s3.amazonaws.com/content.udacity-data.com";
+  int num_segments = 10, segment_size = 1024;
+  char *server = "s3.amazonaws.com/content.udacity-data.com";
 
   if (signal(SIGINT, _sig_handler) == SIG_ERR){
     fprintf(stderr,"Can't catch SIGINT...exiting.\n");
@@ -89,7 +99,7 @@ int main(int argc, char **argv) {
                 nworkerthreads = atoi(optarg);
                 break;
             case 's': // file-path
-//                server = optarg;
+                server = optarg;
                 break;
             case 'h': // help
                 fprintf(stdout, "%s", USAGE);
@@ -104,28 +114,17 @@ int main(int argc, char **argv) {
     ctrl_msg ctrl;
     ctrl.num_segments = num_segments;
     ctrl.segment_size = segment_size;
-  
-    /* SHM initialization...*/
-
-
-
     
     //---------------- Sync ------------------
     ctrl_mq_tx = create_message_queue(cmq_tx_str, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
     ctrl_mq_rx = create_message_queue(cmq_rx_str, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
     
-
-
+    /* Two-way handshake sync between proxy and cache */
     tx_mq(ctrl_mq_tx, (char*)&ctrl, sizeof(thread_packet));
     rx_mq(ctrl_mq_rx, (char*)&ctrl, sizeof(thread_packet));
-    
-
-
-    //---------------- Sync ------------------
    
-    
-    
-    steque_t* segment_q = (steque_t*) malloc(sizeof(steque_t));
+    /* Create shared memory segments */
+    segment_q = (steque_t*) malloc(sizeof(steque_t));
     shm_create_segments(segment_q, ctrl.num_segments, ctrl.segment_size, 1);
 
     /*Initializing server*/
@@ -141,10 +140,16 @@ int main(int argc, char **argv) {
     /*Loops forever*/
     gfserver_serve(&gfs);
     
+    /* End gfserver */
+    gfserver_stop(&gfs);
+    
+    /*Unlink and close 'control' shared queue*/
     mq_unlink(cmq_tx_str);
     mq_unlink(cmq_rx_str);
-    
     mq_close(ctrl_mq_tx);
     mq_close(ctrl_mq_rx);
+    
+    /* Remove all shared memory segments*/
+    shm_clean_segments(ctrl.num_segments);
 
 }

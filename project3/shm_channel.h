@@ -36,6 +36,8 @@ typedef struct segment_item{
     void* segment_ptr;
     mqd_t mq_data_tx;
     mqd_t mq_data_rx;
+    char* mq_data_tx_str;
+    char* mq_data_rx_str;
 }segment_item;
 
 
@@ -47,7 +49,7 @@ typedef struct thread_packet{
     int chunk_size;
     int segment_size;
     int cache_hit;
-    unsigned int segment_index;
+    int segment_index;
 }thread_packet;
 
 

@@ -1,7 +1,7 @@
 #include "shm_channel.h"
 #include <sys/mman.h>
 
-char* shm_path = "/segment";
+char* shm_path = "/segment_sebdel";
 
 
 /*----------------------- MQ  Helper Functions --------------------*/
@@ -11,10 +11,11 @@ mqd_t create_message_queue(char* _name, int _flags, int _msg_sz, int _max_msgs){
     attr.mq_flags = 0;
     attr.mq_curmsgs = 0;
     attr.mq_msgsize = _msg_sz;
-    attr.mq_maxmsg = 9;
+    attr.mq_maxmsg = 10;
+    errno = 0;
     
     // Open a queue with the attribute structure
-    mqd_t mqd = mq_open (_name, _flags, 0644, &attr);
+    mqd_t mqd = mq_open (_name, _flags, 0666, &attr);
     ASSERT(mqd != ((mqd_t)-1));
 
     return mqd;
@@ -23,13 +24,15 @@ mqd_t create_message_queue(char* _name, int _flags, int _msg_sz, int _max_msgs){
 
 
 void tx_mq(mqd_t _mqd, void* _msg, int _msg_len){
+    errno = 0;
     int status = mq_send(_mqd, _msg, _msg_len, 0);
     ASSERT(status == 0);
 }
 
 void rx_mq(mqd_t _mqd, void* _msg, int _msg_len){
+    errno = 0;
     int bytes_received = mq_receive(_mqd, _msg, _msg_len, 0);
-    ASSERT(bytes_received == _msg_len);
+    ASSERT(bytes_received >= 0);
 }
 
 
@@ -71,6 +74,8 @@ void shm_create_segments(steque_t* _segment_queue, int _num_segments, int _segme
         char* mq_rx_str = shm_create_id(rx_prefix, i);
         dbg("mq: %s\n", mq_tx_str);
 
+        shm_info_item->mq_data_tx_str = mq_tx_str;
+        shm_info_item->mq_data_rx_str = mq_rx_str;
         shm_info_item->mq_data_tx = create_message_queue(mq_tx_str, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
         shm_info_item->mq_data_rx = create_message_queue(mq_rx_str, O_CREAT | O_RDWR,  sizeof(thread_packet), MAX_MSGS);
         shm_info_item->segment_ptr = segment_mem;
@@ -116,18 +121,30 @@ void* shm_map_segment(char* _segment_id, int _segment_size){
 
 
 
-void  shm_clean_segments(){
+void  shm_clean_segments(steque_t* _segment_queue){
+    char* tx_prefix;
+    char* rx_prefix;
+    tx_prefix = "/proxy-to-cache";
+    rx_prefix = "/cache-to-proxy";
     
+    for (int i = 0; i < steque_size(_segment_queue); i++) {
+        char* mq_tx_str = shm_create_id(tx_prefix, i);
+        char* mq_rx_str = shm_create_id(rx_prefix, i);
+        shm_unlink(mq_tx_str);
+        shm_unlink(mq_rx_str);
+    }
+    
+    for(int i = 0; i < steque_size(_segment_queue); i++){
+        segment_item* shm_info_item = steque_front(_segment_queue);
+        steque_cycle(_segment_queue);
+        mq_unlink(shm_info_item->mq_data_tx_str);
+        mq_unlink(shm_info_item->mq_data_rx_str);
+        mq_close(shm_info_item->mq_data_tx);
+        mq_close(shm_info_item->mq_data_rx);
+        //Free strings
+        free(shm_info_item->mq_data_tx_str);
+        free(shm_info_item->mq_data_rx_str);
+    }
+
+
 }
-
-
-
-
-
-
-
-
-
-
-
-

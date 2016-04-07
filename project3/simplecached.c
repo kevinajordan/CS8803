@@ -20,8 +20,8 @@ ctrl_msg ctrl;
 steque_t* segment_q;
 mqd_t cmq_tx_fd;
 mqd_t cmq_rx_fd;
-char* cmq_tx_str = "/control-cache-proxy";
-char* cmq_rx_str = "/control-proxy-cache";
+char* cmq_tx_str = "/control_cache_proxy";
+char* cmq_rx_str = "/control_proxy_cache";
 
 
 static void _sig_handler(int signo){
@@ -149,7 +149,7 @@ void perform_task(void* _thread_info){
 
     while(1){
         //Wait to receive request from client
-        rx_mq(cmq_rx_fd, (void*)&thr_pkt, sizeof(thr_pkt));
+        rx_mq(cmq_rx_fd, (void*)&thr_pkt, sizeof(thread_packet));
 
         thr_pkt.segment_size = ctrl.segment_size;
         thr_pkt.chunk_size = -1;
@@ -167,7 +167,7 @@ void perform_task(void* _thread_info){
             thr_pkt.cache_hit = 0;
             thr_pkt.file_size = 0;
             dbg("File not found in cache\n");
-            tx_mq(seg->mq_data_tx, (void*)&thr_pkt, sizeof(thr_pkt));
+            tx_mq(seg->mq_data_tx, (void*)&thr_pkt, sizeof(thread_packet));
         }
         else{
             unsigned file_size = lseek(fd, 0, SEEK_END); ASSERT(file_size > 0);
@@ -178,7 +178,7 @@ void perform_task(void* _thread_info){
             thr_pkt.file_size = atoi(len);
             
             /* Send ACK, client can then read shared-memory segment */
-            tx_mq(seg->mq_data_tx, (void*)&thr_pkt, sizeof(thr_pkt));
+            tx_mq(seg->mq_data_tx, (void*)&thr_pkt, sizeof(thread_packet));
             
             
             
@@ -186,11 +186,7 @@ void perform_task(void* _thread_info){
             dbg("----- Transfer Complete! ---  seg idx=%d, thr_id=%x\n", seg->segment_index, (int)pthread_self());
             
         }
-        
-        //dbg("Reading Segment: %s \n", (char*)seg->segment_ptr);
     }
-
-    
     free(_thread_info);
 }
 
@@ -198,46 +194,23 @@ void perform_task(void* _thread_info){
 void send_file(mqd_t _ctrl_mq_tx, mqd_t _ctrl_mq_rx, int _fd, thread_packet thr_pkt, segment_item* _seg){
     int total_bytes_rx = 0;
     int n;
-    ASSERT(thr_pkt.segment_size > 0);
     
     while (total_bytes_rx < thr_pkt.file_size){
         int offset = thr_pkt.file_size - total_bytes_rx;
         ASSERT(thr_pkt.file_size > total_bytes_rx);
         thr_pkt.chunk_size = (offset < thr_pkt.segment_size) ? offset : thr_pkt.segment_size;
         
-
         n = pread(_fd, _seg->segment_ptr, thr_pkt.chunk_size, total_bytes_rx);
-        if(n < 0){ //EOF
-            dbg("1) seg: %d, n: %d, fs: %d, chunk: %d, offset:%d \n", _seg->segment_index, n, thr_pkt.file_size, thr_pkt.chunk_size, offset);
-            dbg("1) seg: %d, %d/%d..", _seg->segment_index, total_bytes_rx, thr_pkt.file_size);
-            ASSERT(0);
-        }
-        /*if(n != thr_pkt.chunk_size){
-            dbg("2) seg: %d, n: %d, fs: %d, chunk: %d, offset:%d \n", _seg->segment_index, n, thr_pkt.file_size, thr_pkt.chunk_size, offset);
-            dbg("2) seg: %d, %d/%d..", _seg->segment_index, total_bytes_rx, thr_pkt.file_size);
-            ASSERT(0);
-        }
-        */
-        
-        if(n == 0){
-            dbg("2) seg: %d, n: %d, fs: %d, chunk: %d, offset:%d \n", _seg->segment_index, n, thr_pkt.file_size, thr_pkt.chunk_size, offset);
-            dbg("2) seg: %d, %d/%d..", _seg->segment_index, total_bytes_rx, thr_pkt.file_size);
-            ASSERT(total_bytes_rx == thr_pkt.file_size);
-            return;
-        }
-        //sprintf(_seg->segment_ptr, "%s", _seg->segment_ptr);
-        
-        //dbg("Client can read data now. Chunk: %d, Hit = %d\n", thr_pkt.chunk_size, thr_pkt.cache_hit);
-
+        ASSERT(n > 0);
 
         thr_pkt.chunk_size = n;
         ASSERT(thr_pkt.chunk_size <= thr_pkt.segment_size);
-        tx_mq(_seg->mq_data_tx, (void*)&thr_pkt, sizeof(thr_pkt));
+        tx_mq(_seg->mq_data_tx, (void*)&thr_pkt, sizeof(thread_packet));
 
         total_bytes_rx += n;
 
         //Wait until client reads the data and send an ACK back to the cache
-        rx_mq(_seg->mq_data_rx, (void*)&thr_pkt, sizeof(thr_pkt));
+        rx_mq(_seg->mq_data_rx, (void*)&thr_pkt, sizeof(thread_packet));
         
     }
 }
@@ -287,6 +260,3 @@ void clean_control_mq(char* cmq_tx_str, char* cmq_rx_str, int cmq_tx_fd, int cmq
     mq_close(cmq_tx_fd);
     mq_close(cmq_rx_fd);
 }
-
-
-
