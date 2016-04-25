@@ -2,7 +2,8 @@
  * Complete this file and run rpcgen -MN minifyjpeg.x
  */
 
-const MAX_SIZE = 4096;
+ /*/ Max JPEG size = 100 MiB */
+const MAX_JPEG_SIZE = 102400000;
 
 struct minify_img_arg {
     opaque src_buf<>;

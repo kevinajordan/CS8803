@@ -14,7 +14,7 @@
 extern "C" {
 #endif
 
-#define MAX_SIZE 4096
+#define MAX_JPEG_SIZE 102400000
 
 struct minify_img_arg {
 	struct {
